@@ -1,0 +1,59 @@
+# Fork-only continuous deployment to GitHub Pages.
+#
+# AGENTS.md tells this repository to build locally and add no CI pipeline for
+# MVP. This workflow is a deliberate fork-owner override and belongs to the
+# fork, not to homnayangi-com/homnayangi: that repository's Pages must stay
+# the redirect to homnayangi.com, so the job below refuses to run there and
+# scripts/deploy-pages.mjs refuses to push there a second time.
+#
+# Keep it out of upstream pull requests. A branch cut from this fork's `main`
+# carries this file into the diff, so branch from the canonical repository
+# instead:
+#
+#   git fetch upstream
+#   git switch -c my-change upstream/main
+#   git cherry-pick <your commits>
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A force-push to gh-pages should never race another one; let a running deploy
+# finish and publish the newer commit after it rather than cancelling mid-push.
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository != 'homnayangi-com/homnayangi'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # deploy-pages.mjs commits onto gh-pages and force-pushes it; a
+          # shallow clone cannot push that history back.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `pnpm build` inside the deploy script runs `tsc -b` as well, so a type
+      # error fails the deploy instead of publishing a stale bundle.
+      - run: pnpm test
+
+      - name: Publish to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          pnpm deploy:pages
