@@ -41,8 +41,23 @@ export function personalFoods(profile: PoolProfile): Food[] {
  const on = new Set(profile.enabled);
  return [...foods.filter(f=>on.has(f.image)), ...profile.custom.map(f=>({...f,customId:f.id,image:-1,sub:'Món của tôi',quip:'',rarity:priceRarity(f.price)}))];
 }
-export function personalSelector(population: Food[], target: number) {
- if(!population.length) return null;
- const feasible=Math.max(Math.min(...population.map(f=>f.price)),Math.min(target,Math.max(...population.map(f=>f.price))));
- return createFoodSelector(population,feasible);
+// The spend control is a ceiling, not an average. A dish priced above it is out
+// of the pool entirely rather than merely unlikely, which is what stops a 260k
+// risotto from landing on a visitor who said they spend 50k.
+export const withinSpend = (population: Food[], cap: number) => population.filter(f => f.price <= cap);
+// Nobody spends their ceiling every day, so a draw should land under it. The
+// pull is only ever downward: a generous ceiling leaves the ordinary lunch
+// spread alone rather than dragging every roll up to the dearest dish allowed,
+// which is what aiming at the cap itself would do.
+export const SPEND_HEADROOM = 0.8;
+export function personalSelector(population: Food[], cap: number) {
+ const pool=withinSpend(population,cap);
+ if(!pool.length) return null;
+ const natural=createFoodSelector(pool,null);
+ const ceiling=cap*SPEND_HEADROOM;
+ if(natural.expectedPrice<=ceiling) return natural;
+ // A tight ceiling: pull the mean down to it, as far as the pool can reach. A
+ // pool of 25k dishes under a 30k cap has nothing cheaper to shift towards.
+ const feasible=Math.max(Math.min(...pool.map(f=>f.price)),Math.min(ceiling,Math.max(...pool.map(f=>f.price))));
+ return createFoodSelector(pool,feasible);
 }

@@ -10,12 +10,16 @@ export const TARGET_LUNCH_PRICE = 50;
 export const LOG_PRICE_SPREAD = .35;
 export function caseEase(progress:number){const p=Math.max(0,Math.min(1,progress));let lo=0,hi=1;for(let i=0;i<30;i++){const t=(lo+hi)/2,u=1-t,x=3*u*u*t*.075+3*u*t*t*.165+t*t*t;if(x<p)lo=t;else hi=t}const t=(lo+hi)/2,u=1-t;return 3*u*u*t*.82+3*u*t*t+t*t*t}
 type PricedMeal={price:number;rarity:number};
-export function createFoodSelector<T extends PricedMeal>(population:T[],target=TARGET_LUNCH_PRICE){
+// A null target asks for the prior itself: the lunch distribution as it falls
+// over this population, with no mean imposed on it. Truncating the population
+// is already a statement about price, and re-aiming the mean afterwards would
+// state it twice.
+export function createFoodSelector<T extends PricedMeal>(population:T[],target:number|null=TARGET_LUNCH_PRICE){
  if(!population.length)throw new Error('No meals in population');
- if(!Number.isFinite(target)||target<=0)throw new Error('Invalid target');
+ if(target!==null&&(!Number.isFinite(target)||target<=0))throw new Error('Invalid target');
  if(population.some(f=>!Number.isFinite(f.price)||f.price<=0))throw new Error('Invalid meal price');
  const min=Math.min(...population.map(f=>f.price)),max=Math.max(...population.map(f=>f.price));
- if(target<min||target>max)throw new Error('Target mean is outside feasible meal prices');
+ if(target!==null&&(target<min||target>max))throw new Error('Target mean is outside feasible meal prices');
  // Equal total prior weight per distinct price, split among meals at that price.
  // Adding variants at an existing price cannot inflate its aggregate probability.
  const counts=new Map<number,number>();
@@ -29,7 +33,8 @@ export function createFoodSelector<T extends PricedMeal>(population:T[],target=T
  }
  const mean=(w:number[])=>population.reduce((s,f,i)=>s+f.price*w[i],0);
  let raw:number[];
- if(target===min||target===max){const n=counts.get(target)!;raw=population.map(f=>f.price===target?1/n:0)}
+ if(target===null)raw=weights(0);
+ else if(target===min||target===max){const n=counts.get(target)!;raw=population.map(f=>f.price===target?1/n:0)}
  else{
   let lo=-1,hi=1;
   while(mean(weights(lo))>target)lo*=2;

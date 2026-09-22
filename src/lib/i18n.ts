@@ -9,8 +9,8 @@ export const copy = {
     counterTitle: 'Lượt quay hoàn tất được ghi nhận trên website này', caseLabel: 'Mở hòm món ăn',
     soundOn: 'Âm thanh bật', soundOff: 'Âm thanh tắt', turnSoundOff: 'Tắt âm thanh', turnSoundOn: 'Bật âm thanh',
     github: 'Mở mã nguồn trên GitHub', starsPending: 'chưa tải', language: 'Switch to English',
-    spend: 'Mức chi thường ngày', custom: 'Tuỳ chỉnh', customSpend: 'Mức chi tuỳ chỉnh (nghìn đồng)',
-    spendUnit: 'nghìn / bữa', spendError: 'Nhập từ 30 đến 180 nghìn.', vegetarianPool: 'Pool hiện tại: trung bình',
+    spend: 'Mức chi tối đa', custom: 'Tuỳ chỉnh', customSpend: 'Mức tối đa tuỳ chỉnh (nghìn đồng)',
+    spendUnit: 'nghìn / bữa', vegetarianPool: 'Pool hiện tại: trung bình',
     vegetarianOnly: 'Chỉ ăn chay', vegetarian: 'Ăn chay', opening: 'ĐANG MỞ HÒM…', openAgain: 'MỞ LẠI', open: 'MỞ HÒM',
     newItem: 'VẬT PHẨM MỚI', referencePrice: 'Giá tham khảo', perPerson: '/ người', find: 'TÌM QUÁN', continue: 'TIẾP TỤC', nearby: 'gần đây',
     whatsInside: 'TRONG HÒM CÓ GÌ?', items: 'Vật phẩm trong hòm', mystery: '★ MÓN BÍ ẨN', mysteryAlt: 'Món bí ẩn hạng vàng',
@@ -18,6 +18,7 @@ export const copy = {
     emptyCase: 'Hòm của bạn đang trống',
     emptyCaseHint: 'Chọn món có sẵn hoặc thêm món của riêng bạn để bắt đầu quay.',
     vegEmpty: 'Hòm chưa có món chay nào. Tắt bộ lọc chay hoặc thêm món chay.',
+    spendEmpty: 'Không có món nào trong mức chi này. Nâng mức tối đa hoặc thêm món rẻ hơn.',
   },
   en: {
     tiers: ['MIL-SPEC', 'RESTRICTED', 'CLASSIFIED', 'COVERT', '★ SPECIAL ITEM'],
@@ -25,8 +26,8 @@ export const copy = {
     counterTitle: 'Completed spins recorded on this website', caseLabel: 'Open a food case',
     soundOn: 'Sound on', soundOff: 'Sound off', turnSoundOff: 'Mute sound', turnSoundOn: 'Enable sound',
     github: 'Open source on GitHub', starsPending: 'not loaded', language: 'Chuyển sang tiếng Việt',
-    spend: 'Usual spend', custom: 'Custom', customSpend: 'Custom spend (USD)',
-    spendUnit: 'USD / meal', spendError: 'Enter $9–$54.', vegetarianPool: 'Current pool average',
+    spend: 'Max spend', custom: 'Custom', customSpend: 'Custom max (USD)',
+    spendUnit: 'USD / meal', vegetarianPool: 'Current pool average',
     vegetarianOnly: 'Vegetarian only', vegetarian: 'Vegetarian', opening: 'OPENING CASE…', openAgain: 'OPEN AGAIN', open: 'OPEN CASE',
     newItem: 'NEW ITEM', referencePrice: 'Typical Atlanta price', perPerson: '/ person', find: 'FIND NEARBY', continue: 'CONTINUE', nearby: 'near me',
     whatsInside: "WHAT'S IN THE CASE?", items: 'Items in this case', mystery: '★ MYSTERY DISH', mysteryAlt: 'Gold-tier mystery dish',
@@ -34,6 +35,7 @@ export const copy = {
     emptyCase: 'Your case is empty',
     emptyCaseHint: 'Pick catalog dishes or add your own to start spinning.',
     vegEmpty: 'No vegetarian dishes in this case. Turn off the vegetarian filter or add one.',
+    spendEmpty: 'No dishes at this price. Raise the max spend or add cheaper dishes.',
   },
 } as const;
 
@@ -59,23 +61,42 @@ export function foodSubtitle(food: Food, language: Language) {
 // rarity thresholds in priceRarity. The English view restates them on an
 // Atlanta lunch scale rather than converting at the market rate, which would
 // price a 55k phở at $2.20 and say nothing about lunch where the English copy
-// is read. Anchoring the catalog's typical 50k lunch to a ~$15 fast-casual
-// lunch puts the tiers where a diner would expect them: MIL-SPEC up to $12,
-// RESTRICTED to $19.50, CLASSIFIED to $30, COVERT to $39, ★ SPECIAL above that.
-// It is a comparison of what lunch costs, not an exchange rate.
-export const USD_PER_THOUSAND_VND = 0.3;
-// Spend bounds in thousands of VND. copy.*.spendError spells out the same range.
-export const SPEND_MIN = 30, SPEND_MAX = 180;
-export const usdFromThousands = (thousands: number) => thousands * USD_PER_THOUSAND_VND;
-export const thousandsFromUsd = (usd: number) => Math.round(usd / USD_PER_THOUSAND_VND);
+// is read. It is a comparison of what lunch costs, not an exchange rate.
+//
+// The scale cannot be a single multiplier. The catalog spans 10x from a 25k
+// bánh mì to a 260k risotto because Saigon prices a Western plate like an
+// occasion; Atlanta lunch spans nearer 4x. Any factor that reads right at the
+// counter end turns the risotto into a $78 dinner, and any factor that tames
+// the risotto prices the bánh mì at pocket change. So the scale is a power
+// curve pinned at both ends of the catalog instead: the cheapest dish and the
+// dearest one are priced from Atlanta menus and everything between follows.
+// That lands the rarity steps (40/65/100/130) at $11, $14, $18 and $21, with
+// ★ SPECIAL above that up to the $32 splurge.
+const CHEAPEST = { thousands: 25, usd: 8 }, DEAREST = { thousands: 260, usd: 32 };
+export const USD_CURVE = Math.log(DEAREST.usd / CHEAPEST.usd) / Math.log(DEAREST.thousands / CHEAPEST.thousands);
+export const USD_SCALE = CHEAPEST.usd / CHEAPEST.thousands ** USD_CURVE;
+// Spend bounds in thousands of VND. The floor is the cheapest dish, since a
+// ceiling under it empties the case; the ceiling is validateProfile's own
+// limit on a custom dish price, so no dish a visitor can add is unreachable.
+export const SPEND_MIN = CHEAPEST.thousands, SPEND_MAX = 500;
+export const usdFromThousands = (thousands: number) => USD_SCALE * thousands ** USD_CURVE;
+export const thousandsFromUsd = (usd: number) => Math.round((usd / USD_SCALE) ** (1 / USD_CURVE));
 
+// Whole dollars on screen: these are "what this costs around here" figures, and
+// a cent-exact $12.76 claims a precision the catalog never had. The spend input
+// keeps its cents so a typed amount still round-trips to the same thousands.
 export function priceLabel(thousands: number | string, language: Language, approximate = false) {
   const amount = Number(thousands);
   const formatted = language === 'en'
-    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(usdFromThousands(amount))
+    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(usdFromThousands(amount))
     : `${new Intl.NumberFormat('vi-VN').format(amount * 1000)}đ`;
   return `${approximate ? '~' : ''}${formatted}`;
 }
+
+// The bounds are one calculation, not a number repeated in two translations.
+export const spendRangeHint = (language: Language) => language === 'en'
+  ? `Enter ${priceLabel(SPEND_MIN, 'en')}–${priceLabel(SPEND_MAX, 'en')}.`
+  : `Nhập từ ${SPEND_MIN} đến ${SPEND_MAX} nghìn.`;
 
 // Number inputs are typed in the currency on screen; what gets stored stays in
 // thousands of VND, so switching language never rewrites a saved cookie.

@@ -15,7 +15,9 @@ export function PreferencesPanel({preferences:a,language,disabled,variant='heade
  useEffect(()=>{if(priceUnit.current!==language){const thousands=amountFromInput(price,priceUnit.current);priceUnit.current=language;if(Number.isFinite(thousands))setPrice(amountToInput(thousands,language))}},[language]);
  const resetForm=()=>{setEditing(null);setName('');setPrice(amountToInput(50,language));setVeg(false)};
  function add(){
-  try{const item={id:editing||crypto.randomUUID(),name:name.trim(),price:amountFromInput(price,language),veg};const next=validateProfile({...draft,custom:editing?draft.custom.map(f=>f.id===editing?item:f):[...draft.custom,item]});updateDraft(next);resetForm();setNotice('')}catch{setNotice(vi?'Tên 1–60 ký tự, giá 10–500 nghìn, tối đa 50 món.':'Name: 1–60 characters, price: $3–$150, up to 50 dishes.')}
+  try{const item={id:editing||crypto.randomUUID(),name:name.trim(),price:amountFromInput(price,language),veg};const next=validateProfile({...draft,custom:editing?draft.custom.map(f=>f.id===editing?item:f):[...draft.custom,item]});updateDraft(next);resetForm();setNotice('')}// validateProfile's own 10–500 bounds, quoted in the currency on screen
+  // rather than restated as dollars that drift when the scale is retuned.
+  catch{setNotice(vi?'Tên 1–60 ký tự, giá 10–500 nghìn, tối đa 50 món.':`Name: 1–60 characters, price: ${priceLabel(10,'en')}–${priceLabel(500,'en')}, up to 50 dishes.`)}
  }
  const dirty=JSON.stringify(draft)!==JSON.stringify(a.profile);
  const updateDraft=(next:PoolProfile)=>{setDraft(next);a.save(next)};
