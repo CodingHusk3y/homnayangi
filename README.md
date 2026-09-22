@@ -1,4 +1,4 @@
-# Hom nay an gi 🍜
+# Hôm nay ăn gì 🍜
 
 **Website: [codinghusk3y.github.io/homnayangi](https://codinghusk3y.github.io/homnayangi/)**
 

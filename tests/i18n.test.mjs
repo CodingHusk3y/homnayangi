@@ -10,7 +10,7 @@ const out=mkdtempSync(join(tmpdir(),'tnag-i18n-'));
 try{
  buildSync({entryPoints:['src/lib/i18n.ts','src/lib/foods.ts'],outdir:out,outExtension:{'.js':'.cjs'},bundle:true,platform:'node',format:'cjs'});
  const require_=createRequire(import.meta.url);
- const {priceLabel,amountToInput,amountFromInput,usdFromThousands,spendRangeHint,SPEND_MIN,SPEND_MAX}=require_(join(out,'i18n.cjs'));
+ const {priceLabel,amountToInput,amountFromInput,usdFromThousands,spendRangeHint,SPEND_MIN,SPEND_MAX,PRICE_MIN,PRICE_MAX}=require_(join(out,'i18n.cjs'));
  const {foods}=require_(join(out,'foods.cjs'));
  test('Vietnamese keeps the stored thousands of dong',()=>{
   assert.equal(priceLabel(45,'vi'),'45.000đ');
@@ -20,8 +20,8 @@ try{
   assert.equal(priceLabel(45,'en'),'$11');
   assert.equal(priceLabel(150,'en',true),'~$23');
   // Cheapest and dearest custom dish the pool validator accepts.
-  assert.equal(priceLabel(10,'en'),'$5');
-  assert.equal(priceLabel(500,'en'),'$47');
+  assert.equal(priceLabel(PRICE_MIN,'en'),'$5');
+  assert.equal(priceLabel(PRICE_MAX,'en'),'$500');
  });
  test('the rarity bands land where an Atlanta diner would put them',()=>{
   // priceRarity steps at 40/65/100/130; a tier has to read as its own price bracket.
@@ -44,19 +44,26 @@ try{
   assert.equal(amountFromInput('50','vi'),50);
   assert.equal(amountToInput(50,'en'),'12.06');
   assert.equal(amountFromInput('12.06','en'),50);
-  // Every price the catalog and the spend input can hold survives the trip
-  // through dollars and back, so switching language never rewrites a cookie.
-  for(let thousands=10;thousands<=SPEND_MAX;thousands++)
+  // Every price a dish or a spend can hold survives the trip through dollars
+  // and back, so switching language never rewrites a saved cookie. The curve
+  // flattens as it climbs, so the cents have to stay meaningful at $500 too.
+  for(let thousands=PRICE_MIN;thousands<=PRICE_MAX;thousands++)
    assert.equal(amountFromInput(amountToInput(thousands,'en'),'en'),thousands);
+  // The ceiling is a round number of dollars, because that is the side that
+  // runs into it: typing 500 has to be accepted, not rejected by one đồng.
+  assert.equal(amountFromInput('500','en'),PRICE_MAX);
  });
  test('the English spend bounds match the Vietnamese ones',()=>{
   // The floor is the cheapest dish in the catalog: a ceiling under it would
   // leave nothing to draw. The ceiling clears the dearest dish anyone can add.
   assert.equal(SPEND_MIN,25);
   assert.equal(amountToInput(SPEND_MIN,'en'),'8');
-  assert.equal(amountToInput(SPEND_MAX,'en'),'47.13');
-  assert.equal(spendRangeHint('en'),'Enter $8–$47.');
-  assert.equal(spendRangeHint('vi'),'Nhập từ 25 đến 500 nghìn.');
+  // A dish may be added right up to the spend ceiling, so the two must agree:
+  // a dish dearer than any reachable spend could never be drawn at all.
+  assert.equal(SPEND_MAX,PRICE_MAX);
+  assert.equal(amountToInput(SPEND_MAX,'en'),'500');
+  assert.equal(spendRangeHint('en'),'Enter $8–$500.');
+  assert.equal(spendRangeHint('vi'),'Nhập từ 25 đến 27.017 nghìn.');
  });
  test('a dollar amount always resolves to a whole number of thousands',()=>{
   // validateProfile and the spend check both require an integer price.

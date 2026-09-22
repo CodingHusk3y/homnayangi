@@ -75,12 +75,19 @@ export function foodSubtitle(food: Food, language: Language) {
 const CHEAPEST = { thousands: 25, usd: 8 }, DEAREST = { thousands: 260, usd: 32 };
 export const USD_CURVE = Math.log(DEAREST.usd / CHEAPEST.usd) / Math.log(DEAREST.thousands / CHEAPEST.thousands);
 export const USD_SCALE = CHEAPEST.usd / CHEAPEST.thousands ** USD_CURVE;
-// Spend bounds in thousands of VND. The floor is the cheapest dish, since a
-// ceiling under it empties the case; the ceiling is validateProfile's own
-// limit on a custom dish price, so no dish a visitor can add is unreachable.
-export const SPEND_MIN = CHEAPEST.thousands, SPEND_MAX = 500;
 export const usdFromThousands = (thousands: number) => USD_SCALE * thousands ** USD_CURVE;
 export const thousandsFromUsd = (usd: number) => Math.round((usd / USD_SCALE) ** (1 / USD_CURVE));
+
+// What a custom dish may cost, in thousands of VND. The ceiling is a round
+// number of dollars rather than of đồng because it is the English side that
+// runs into it: the catalog tops out at a $32 lunch, so anyone adding a dish
+// dearer than that is pricing a dinner out, in dollars. Stored VND follows the
+// curve from there and lands wherever it lands.
+export const PRICE_MIN = 10, PRICE_MAX = thousandsFromUsd(500);
+// Spend bounds. The floor is the cheapest dish, since a ceiling under it
+// empties the case; the ceiling matches the dearest dish anyone can add, so no
+// dish a visitor creates is priced out of reach of its own spend control.
+export const SPEND_MIN = CHEAPEST.thousands, SPEND_MAX = PRICE_MAX;
 
 // Whole dollars on screen: these are "what this costs around here" figures, and
 // a cent-exact $12.76 claims a precision the catalog never had. The spend input
@@ -96,7 +103,11 @@ export function priceLabel(thousands: number | string, language: Language, appro
 // The bounds are one calculation, not a number repeated in two translations.
 export const spendRangeHint = (language: Language) => language === 'en'
   ? `Enter ${priceLabel(SPEND_MIN, 'en')}–${priceLabel(SPEND_MAX, 'en')}.`
-  : `Nhập từ ${SPEND_MIN} đến ${SPEND_MAX} nghìn.`;
+  : `Nhập từ ${SPEND_MIN} đến ${new Intl.NumberFormat('vi-VN').format(SPEND_MAX)} nghìn.`;
+// The same bounds for the custom dish form, which validateProfile enforces.
+export const priceRangeHint = (language: Language) => language === 'en'
+  ? `Name: 1–60 characters, price: ${priceLabel(PRICE_MIN, 'en')}–${priceLabel(PRICE_MAX, 'en')}, up to 50 dishes.`
+  : `Tên 1–60 ký tự, giá ${PRICE_MIN}–${new Intl.NumberFormat('vi-VN').format(PRICE_MAX)} nghìn, tối đa 50 món.`;
 
 // Number inputs are typed in the currency on screen; what gets stored stays in
 // thousands of VND, so switching language never rewrites a saved cookie.

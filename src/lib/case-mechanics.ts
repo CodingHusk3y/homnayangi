@@ -24,8 +24,15 @@ export function createFoodSelector<T extends PricedMeal>(population:T[],target:n
  // Adding variants at an existing price cannot inflate its aggregate probability.
  const counts=new Map<number,number>();
  population.forEach(f=>counts.set(f.price,(counts.get(f.price)||0)+1));
- const logs=population.map(f=>Math.log(f.price/50));
- const prior=logs.map((x,i)=>-.5*(x/LOG_PRICE_SPREAD)**2-Math.log(counts.get(population[i].price)!));
+ const logs=population.map(f=>Math.log(f.price/TARGET_LUNCH_PRICE));
+ // Heavy-tailed on purpose. A bell curve in log-price space falls off as
+ // exp(-x²), which past a few multiples of a normal lunch is not "rare" but
+ // "never": it priced the catalog's own dearest dish at one roll in a million
+ // and anything a visitor added above that at odds with no physical meaning.
+ // A Cauchy tail decays as 1/x² instead, so an ordinary lunch still dominates
+ // every roll while a splurge stays reachable — which is the whole promise of
+ // opening a case. LOG_PRICE_SPREAD keeps its meaning as the half-width.
+ const prior=logs.map((x,i)=>-Math.log1p((x/LOG_PRICE_SPREAD)**2)-Math.log(counts.get(population[i].price)!));
  function weights(tilt:number){
   const logits=logs.map((x,i)=>prior[i]+tilt*x),anchor=Math.max(...logits);
   const raw=logits.map(x=>Math.exp(x-anchor)),sum=raw.reduce((s,x)=>s+x,0);

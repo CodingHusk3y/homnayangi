@@ -1,5 +1,6 @@
 import { foods, type Food } from './foods';
 import { createFoodSelector, priceRarity } from './case-mechanics';
+import { PRICE_MAX, PRICE_MIN } from './i18n';
 export type CustomFood = { id: string; name: string; price: number; veg: boolean };
 // `enabled` lists the catalog dishes a visitor has opted in. The case starts
 // empty, so an unsaved or cleared profile means "no dishes yet", not "all".
@@ -15,7 +16,7 @@ export function validateProfile(input: unknown): PoolProfile {
  const custom = p.custom.map((item: unknown): CustomFood => {
   if (!item || typeof item!=='object') throw new Error('Invalid dish');
   const f=item as Record<string,unknown>;
-  if(Object.keys(f).some(k=>!['id','name','price','veg'].includes(k)) || typeof f.id!=='string' || !/^[0-9a-f-]{36}$/i.test(f.id) || typeof f.name!=='string' || !f.name.trim() || f.name.length>60 || /[\x00-\x1f\x7f]/.test(f.name) || !Number.isInteger(f.price) || (f.price as number)<10 || (f.price as number)>500 || typeof f.veg!=='boolean') throw new Error('Invalid dish');
+  if(Object.keys(f).some(k=>!['id','name','price','veg'].includes(k)) || typeof f.id!=='string' || !/^[0-9a-f-]{36}$/i.test(f.id) || typeof f.name!=='string' || !f.name.trim() || f.name.length>60 || /[\x00-\x1f\x7f]/.test(f.name) || !Number.isInteger(f.price) || (f.price as number)<PRICE_MIN || (f.price as number)>PRICE_MAX || typeof f.veg!=='boolean') throw new Error('Invalid dish');
   return {id:f.id,name:f.name.trim().normalize('NFC'),price:f.price as number,veg:f.veg};
  });
  if(new Set(custom.map(f=>f.id)).size!==custom.length) throw new Error('Invalid dish');
